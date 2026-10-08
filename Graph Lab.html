@@ -38,14 +38,15 @@ button,select{box-shadow:var(--sh,none)}button:active{transform:translate(1px,1p
 #tools button{border:0;box-shadow:none}
 body[data-scan]::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:9;background:repeating-linear-gradient(0deg,rgba(0,0,0,.22) 0 1px,transparent 1px 3px)}
 #skj{flex:1;min-height:220px;font:12px/1.4 ui-monospace,monospace;background:var(--bg);color:var(--fg);border:1px solid var(--bd);resize:none}
+#esc{width:58px;background:var(--bg);color:var(--fg);border:1px solid var(--bd);padding:5px}
 </style></head><body>
 <div class="bar">
  <b>Graph Lab</b>
  <label><input type="checkbox" id="dir"> Dirigido</label>
- <label><input type="checkbox" id="wt"> Ponderado</label>
+ <label><input type="checkbox" id="wt"> Ponderado</label><label title="w = ⌊distancia / escala⌋, se recalcula al arrastrar"><input type="checkbox" id="auto"> Peso = distancia</label><label>Escala <input type="number" id="esc" value="10" min="1"></label>
  <button id="smp">Ejemplo</button><label>Tema <select id="theme"></select></label><button id="clr">Limpiar</button>
  <span style="flex:1"></span>
- <select id="alg"></select>
+ <label>Estructura <select id="st"><option value="graph">Grafo</option><option value="list">Lista enlazada</option><option value="tree">Árbol BST</option></select></label><select id="alg"></select>
  <label>Inicio <select id="s"></select></label><label>Destino <select id="t"></select></label>
 </div>
 <div class="bar">
@@ -53,7 +54,7 @@ body[data-scan]::after{content:'';position:fixed;inset:0;pointer-events:none;z-i
  <button id="pl" class="on" title="Reproducir/Pausar">▶ Reproducir</button>
  <button id="sf" title="Paso adelante">▶|</button>
  <label>Velocidad <input type="range" id="sp" min="1" max="10" value="5"></label>
- <span id="ct" style="color:var(--mu)"></span>
+ <span id="ops" style="display:flex;gap:6px;align-items:center"></span><span id="ct" style="color:var(--mu)"></span>
 </div>
 <main>
  <section id="cv"><div id="tools"><button data-m="v">↖ Mover (V)</button><button data-m="n">➕ Nodo (N)</button><button data-m="e">🔗 Arista (E)</button><button data-m="d">🗑️ Eliminar (D)</button></div><svg id="svg"></svg><input id="ed"></section>
@@ -73,17 +74,21 @@ const col=s=>COLORS[s]||s;
 
 /* ============ GraphEngine ============ */
 class GraphEngine{
- constructor(){this.nodes=[];this.edges=[];this.directed=false;this.weighted=false}
+ constructor(){this.nodes=[];this.edges=[];this.directed=false;this.weighted=false;this.autoW=false;this.scale=10}
  key(u,v){return this.directed?u+'>'+v:[u,v].sort().join('-')}
  nd(id){return this.nodes.find(n=>n.id===id)}
  nextName(){for(let i=0;i<26;i++){const c=String.fromCharCode(65+i);if(!this.nd(c))return c}return'N'+this.nodes.length}
  addNode(x,y){const n={id:this.nextName(),x,y};this.nodes.push(n);return n}
- addEdge(u,v){if(u===v||this.edges.some(e=>this.key(e.u,e.v)===this.key(u,v)))return null;const e={u,v,w:1};this.edges.push(e);return e}
+ addEdge(u,v){if(u===v||this.edges.some(e=>this.key(e.u,e.v)===this.key(u,v)))return null;const e={u,v,w:1};this.edges.push(e);if(this.autoW)e.w=this.wDist(e);return e}
  rename(o,n){if(!n||this.nd(n))return false;this.nd(o).id=n;this.edges.forEach(e=>{if(e.u===o)e.u=n;if(e.v===o)e.v=n});return true}
  delNode(id){this.nodes=this.nodes.filter(n=>n.id!==id);this.edges=this.edges.filter(e=>e.u!==id&&e.v!==id)}
  delEdge(e){this.edges=this.edges.filter(x=>x!==e)}
  setOpts(d,w){this.directed=d;this.weighted=w;const s=new Set();this.edges=this.edges.filter(e=>{const k=this.key(e.u,e.v);return s.has(k)?false:(s.add(k),true)})}
  w(e){return this.weighted?e.w:1}
+ // w(A,B) = floor( dist_euclídea(A,B) / escala )
+ wDist(e){const a=this.nd(e.u),b=this.nd(e.v);return Math.floor(Math.hypot(a.x-b.x,a.y-b.y)/this.scale)}
+ // Recalcula pesos (solo aristas incidentes a `id`, o todas). api() lee e.w al ejecutar, así los algoritmos usan siempre el valor vigente.
+ recalc(id){if(!this.autoW)return false;for(const e of this.edges)if(id===undefined||e.u===id||e.v===id)e.w=this.wDist(e);return true}
  // Vista de solo lectura que reciben los algoritmos
  api(){
   const g=this,E=g.edges.map(e=>({from:e.u,to:e.v,weight:g.w(e)}));
@@ -91,6 +96,9 @@ class GraphEngine{
   const k=ratios.length?Math.min(...ratios):0;
   return Object.freeze({directed:g.directed,weighted:g.weighted,nodes:g.nodes.map(n=>n.id),edges:E,
    neighbors:id=>{const o=[];g.edges.forEach(e=>{if(e.u===id)o.push({to:e.v,weight:g.w(e)});else if(!g.directed&&e.v===id)o.push({to:e.u,weight:g.w(e)})});return o},
+   children:id=>g.edges.filter(e=>e.u===id).map(e=>e.v).sort((a,b)=>g.nd(a).x-g.nd(b).x),
+   left:id=>g.edges.filter(e=>e.u===id&&g.nd(e.v).x<g.nd(id).x).map(e=>e.v)[0],
+   right:id=>g.edges.filter(e=>e.u===id&&g.nd(e.v).x>g.nd(id).x).map(e=>e.v)[0],
    h:(a,b)=>{const p=g.nd(a),q=g.nd(b);return Math.hypot(p.x-q.x,p.y-q.y)*k}}); // heurística admisible: distancia euclídea × mínima razón peso/longitud
  }
 }
@@ -271,26 +279,190 @@ function shapeSvg(n,fill,stroke,sw,dash){
   case'hex':return`<polygon points="${pts([0,1,2,3,4,5].map(i=>[R*1.1*Math.cos(i*Math.PI/3),R*1.1*Math.sin(i*Math.PI/3)]))}" ${a}/>`;
   default:return`<circle cx="${n.x}" cy="${n.y}" r="${R}" ${a}/>`}}
 
+/* ============ Listas y árboles (sobre el mismo GraphEngine) ============ */
+// Lista = grafo dirigido en cadena; Árbol BST = grafo dirigido padre→hijo. Los algoritmos usan la misma API `visualizer`.
+let ST='graph';
+Object.assign(ALGS,{
+'Lista: recorrer':`if(!params.start){ await visualizer.log('Lista vacía'); return; }
+let cur=params.start; const seen=new Set();
+while(cur!==undefined){
+  if(seen.has(cur)){ await visualizer.log('Ciclo: ya visité '+cur); break; }
+  seen.add(cur);
+  await visualizer.visitNode(cur,'current');
+  await visualizer.log('Visitar '+cur);
+  await visualizer.visitNode(cur,'visited');
+  const nx=graph.neighbors(cur)[0]; cur=nx&&nx.to;
+}
+await visualizer.log('Fin (null)');`,
+'Lista: buscar':`let cur=params.start, i=0;
+while(cur!==undefined && i<=graph.nodes.length){
+  await visualizer.visitNode(cur,'current');
+  await visualizer.log('Comparar '+cur+' con '+params.end+' (posición '+i+')');
+  if(cur===params.end){ await visualizer.visitNode(cur,'path'); await visualizer.log('Encontrado en posición '+i); return; }
+  await visualizer.visitNode(cur,'visited');
+  const nx=graph.neighbors(cur)[0]; cur=nx&&nx.to; i++;
+}
+await visualizer.log('No encontrado');`,
+'Lista: nodo medio':`const nx=id=>{const n=graph.neighbors(id)[0];return n&&n.to};
+let slow=params.start, fast=params.start, k=0;
+while(fast!==undefined && nx(fast)!==undefined && k++<graph.nodes.length){
+  await visualizer.visitNode(slow,'visited');
+  slow=nx(slow); fast=nx(nx(fast));
+  await visualizer.visitNode(slow,'current');
+  await visualizer.setStructure('lento / rápido',[slow,fast===undefined?'null':fast]);
+  await visualizer.log('lento avanza 1, rápido avanza 2');
+}
+await visualizer.visitNode(slow,'path');
+await visualizer.log('Nodo medio: '+slow);`,
+'Lista: detectar ciclo':`// Floyd (tortuga y liebre)
+const nx=id=>{const n=graph.neighbors(id)[0];return n&&n.to};
+let t=params.start, h=params.start;
+while(h!==undefined && nx(h)!==undefined){
+  t=nx(t); h=nx(nx(h));
+  await visualizer.visitNode(t,'current');
+  if(h!==undefined) await visualizer.visitNode(h,'queued');
+  await visualizer.log('tortuga='+t+' liebre='+h);
+  if(t===h){ await visualizer.visitNode(t,'path'); await visualizer.log('¡Ciclo detectado en '+t+'!'); return; }
+}
+await visualizer.log('Sin ciclo: la liebre llegó a null');`,
+'Preorden':`const out=[];
+async function go(u){
+  if(u===undefined) return;
+  await visualizer.visitNode(u,'current'); out.push(u);
+  await visualizer.setStructure('Salida',out); await visualizer.log('Visitar '+u+' (raíz, izq, der)');
+  await visualizer.visitNode(u,'visited');
+  await go(graph.left(u)); await go(graph.right(u));
+}
+await go(params.start);`,
+'Inorden':`const out=[];
+async function go(u){
+  if(u===undefined) return;
+  await visualizer.visitNode(u,'queued');
+  await go(graph.left(u));
+  await visualizer.visitNode(u,'current'); out.push(u);
+  await visualizer.setStructure('Salida',out); await visualizer.log('Visitar '+u+' (izq, raíz, der)');
+  await visualizer.visitNode(u,'visited');
+  await go(graph.right(u));
+}
+await go(params.start);`,
+'Postorden':`const out=[];
+async function go(u){
+  if(u===undefined) return;
+  await visualizer.visitNode(u,'queued');
+  await go(graph.left(u)); await go(graph.right(u));
+  await visualizer.visitNode(u,'current'); out.push(u);
+  await visualizer.setStructure('Salida',out); await visualizer.log('Visitar '+u+' (izq, der, raíz)');
+  await visualizer.visitNode(u,'visited');
+}
+await go(params.start);`,
+'Por niveles':`const q=[params.start], out=[];
+while(q.length){
+  const u=q.shift();
+  await visualizer.visitNode(u,'current'); out.push(u);
+  await visualizer.log('Visitar '+u);
+  for(const c of [graph.left(u),graph.right(u)]) if(c!==undefined){
+    q.push(c); await visualizer.highlightEdge(u,c,'queued'); await visualizer.visitNode(c,'queued');
+  }
+  await visualizer.visitNode(u,'visited');
+  await visualizer.setStructure('Cola',q); await visualizer.setStructure('Salida',out);
+}`,
+'BST: buscar':`let u=params.start; const t=+params.end;
+while(u!==undefined){
+  await visualizer.visitNode(u,'current');
+  await visualizer.log('Comparar '+t+' con '+u);
+  if(+u===t){ await visualizer.visitNode(u,'path'); await visualizer.log('Encontrado'); return; }
+  const nx=t<+u?graph.left(u):graph.right(u);
+  await visualizer.log(t<+u?'Menor: ir a la izquierda':'Mayor: ir a la derecha');
+  await visualizer.visitNode(u,'visited');
+  if(nx!==undefined) await visualizer.highlightEdge(u,nx,'current');
+  u=nx;
+}
+await visualizer.log('No encontrado');`,
+'Altura':`async function h(u){
+  if(u===undefined) return 0;
+  await visualizer.visitNode(u,'current');
+  const a=await h(graph.left(u)), b=await h(graph.right(u)), r=1+Math.max(a,b);
+  await visualizer.visitNode(u,'visited');
+  await visualizer.log('altura('+u+') = '+r);
+  return r;
+}
+await visualizer.log('Altura del árbol (en nodos): '+await h(params.start));`,
+'Validar BST':`async function ok(u,lo,hi){
+  if(u===undefined) return true;
+  await visualizer.visitNode(u,'current');
+  const v=+u;
+  if(!(v>lo && v<hi)){ await visualizer.visitNode(u,'path'); await visualizer.log('✗ '+u+' viola el rango ('+lo+', '+hi+')'); return false; }
+  const r=(await ok(graph.left(u),lo,v)) && (await ok(graph.right(u),v,hi));
+  await visualizer.visitNode(u,'visited'); return r;
+}
+await visualizer.log((await ok(params.start,-Infinity,Infinity))?'Es un BST válido':'NO es un BST');`});
+const GROUPS={graph:['BFS','DFS','Dijkstra','A*','Prim','Kruskal'],list:['Lista: recorrer','Lista: buscar','Lista: nodo medio','Lista: detectar ciclo'],tree:['Preorden','Inorden','Postorden','Por niveles','BST: buscar','Altura','Validar BST']};
+function fillAlg(s){$('#alg').innerHTML=GROUPS[s].map(k=>'<option>'+k+'</option>').join('')+'<option>Personalizado</option>';$('#code').value=ALGS[GROUPS[s][0]];hl()}
+
+const heads=()=>G.nodes.filter(n=>!G.edges.some(e=>e.v===n.id));
+const succ=id=>{const e=G.edges.find(e=>e.u===id);return e&&e.v};
+const mk=v=>{G.nodes.push({id:v,x:0,y:0})};
+function bstIns(v){if(G.nd(v))return;const r=heads()[0];mk(v);if(!r)return;let u=r.id;
+ for(;;){const c=G.edges.filter(e=>e.u===u).map(e=>e.v).find(x=>(+x<+u)===(+v<+u));if(c===undefined){G.addEdge(u,v);return}u=c}}
+function bstDel(v){const r=heads()[0];if(!r||!G.nd(v))return;const vals=[],pre=u=>{if(u!==v)vals.push(u);G.edges.filter(e=>e.u===u).map(e=>e.v).forEach(pre)};
+ pre(r.id);G.nodes=[];G.edges=[];vals.forEach(bstIns)} // reconstruye el BST sin el valor eliminado
+const OPS={
+ list:{'Insertar final':v=>{if(G.nd(v))return;let t=heads()[0],k=0;while(t&&succ(t.id)!==undefined&&k++<99)t=G.nd(succ(t.id));mk(v);if(t)G.addEdge(t.id,v)},
+  'Insertar inicio':v=>{if(G.nd(v))return;const h=heads()[0];mk(v);if(h)G.addEdge(v,h.id)},
+  'Eliminar':v=>{if(!G.nd(v))return;const p=G.edges.find(e=>e.v===v),n=succ(v);G.delNode(v);if(p&&n!==undefined)G.addEdge(p.u,n)}},
+ tree:{'Insertar':bstIns,'Eliminar':bstDel}};
+function run1(k){const i=$('#val'),v=i.value.trim();if(!v||(ST==='tree'&&isNaN(+v)))return;OPS[ST][k](v);i.value='';changed();i.focus()}
+function layout(){
+ const W=svg.clientWidth||600,H=svg.clientHeight||400,seen=new Set(),nxt=id=>G.edges.filter(e=>e.u===id).map(e=>e.v).filter(x=>!seen.has(x));let c=0;
+ if(ST==='list'){for(const h of[...heads(),...G.nodes]){let u=h.id;while(u!==undefined&&!seen.has(u)){seen.add(u);G.nd(u).k=c++;u=nxt(u)[0]}}
+  const st=Math.min(90,(W-80)/Math.max(c-1,1));G.nodes.forEach(n=>{n.x=40+n.k*st;n.y=H/2})}
+ else{const go=(id,d)=>{seen.add(id);const k=nxt(id),isL=x=>+x<+id;k.filter(isL).forEach(x=>{if(!seen.has(x))go(x,d+1)});const n=G.nd(id);n.k=c++;n.y=80+d*70;k.filter(x=>!isL(x)).forEach(x=>{if(!seen.has(x))go(x,d+1)})};
+  for(const h of[...heads(),...G.nodes])if(!seen.has(h.id))go(h.id,0);
+  const st=Math.min(60,(W-80)/Math.max(c-1,1));G.nodes.forEach(n=>n.x=40+n.k*st)}}
+function setStruct(t){
+ ST=t;const g=t==='graph',o=OPS[t]||{},ks=Object.keys(o);
+ $('#dir').disabled=$('#wt').disabled=$('#auto').disabled=!g;if(!g){G.autoW=false;$('#auto').checked=false}if(!g){$('#dir').checked=true;$('#wt').checked=false;G.setOpts(true,false)}
+ G.nodes=[];G.edges=[];sel=null;fillAlg(t);
+ $('#ops').innerHTML=ks.length?'<input id="val" size="5" placeholder="valor">'+ks.map(k=>'<button data-k="'+k+'">'+k+'</button>').join(''):'';
+ $('#ops').querySelectorAll('button').forEach(b=>b.onclick=()=>run1(b.dataset.k));
+ if(ks.length)$('#val').onkeydown=e=>{if(e.key==='Enter')run1(ks[0])};
+ loadSample()}
+function loadSample(){if(ST==='graph')return gSmp();(ST==='list'?['4','7','2','9']:['50','30','70','20','40','60','80']).forEach(v=>OPS[ST][ST==='list'?'Insertar final':'Insertar'](v));changed()}
+
 /* ============ Estado + Canvas ============ */
 const G=new GraphEngine(),svg=$('#svg');
 let frames=null,idx=0,playing=false,timer=null,sel=null,pend=null,drag=null,repMode='list';
 const pt=ev=>{const r=svg.getBoundingClientRect();return{x:ev.clientX-r.left,y:ev.clientY-r.top}};
 const nodeAt=(x,y)=>G.nodes.find(n=>Math.hypot(n.x-x,n.y-y)<=R);
-const segD=(x,y,a,b)=>{const dx=b.x-a.x,dy=b.y-a.y;let t=((x-a.x)*dx+(y-a.y)*dy)/(dx*dx+dy*dy||1);t=Math.max(0,Math.min(1,t));return Math.hypot(x-a.x-t*dx,y-a.y-t*dy)};
-const edgeAt=(x,y)=>G.edges.find(e=>segD(x,y,G.nd(e.u),G.nd(e.v))<9);
+const edgeAt=(x,y)=>{let best=null,bd=10;for(const e of G.edges){const g=geo(e);for(let t=0;t<=1;t+=.1){const q=bez(g,t),d=Math.hypot(q.x-x,q.y-y);if(d<bd){bd=d;best=e}}}return best};
 const fr=()=>frames?frames[idx]:{n:{},e:{},ds:{},l:0};
 
+/* ---- Geometría ---- */
+// Distancia del centro al perímetro del nodo en la dirección (ux,uy), según la forma del skin activo.
+function perim(ux,uy){const ax=Math.abs(ux),ay=Math.abs(uy);
+ switch(SK.shape){
+  case'square':return R/Math.max(ax,ay);
+  case'pixel':return Math.min(R/Math.max(ax,ay),1.6*R/(ax+ay)); // cuadrado con esquinas recortadas
+  case'hex':{const t=Math.atan2(uy,ux),f=Math.round((t-Math.PI/6)/(Math.PI/3))*Math.PI/3+Math.PI/6;return R*1.1*Math.cos(Math.PI/6)/Math.cos(t-f)}
+  default:return R}}
+// Arista = curva cuadrática (recta si no hay arista inversa). Los extremos caen en el perímetro, no en el centro.
+function geo(e){
+ const a=G.nd(e.u),b=G.nd(e.v),dx=b.x-a.x,dy=b.y-a.y,L=Math.hypot(dx,dy)||1,px=-dy/L,py=dx/L;
+ const bend=G.directed&&G.edges.some(z=>z.u===e.v&&z.v===e.u)?14:0;
+ const c={x:(a.x+b.x)/2+px*bend*2,y:(a.y+b.y)/2+py*bend*2};
+ const ends=(n,t)=>{const vx=t.x-n.x,vy=t.y-n.y,l=Math.hypot(vx,vy)||1,ux=vx/l,uy=vy/l,d=perim(ux,uy);return{x:n.x+ux*d,y:n.y+uy*d,ux,uy}};
+ const s=ends(a,c),t=ends(b,c);
+ return{p1:s,p2:t,c,ax:-t.ux,ay:-t.uy,px,py}} // (ax,ay) = dirección de llegada (punta de flecha)
+const bez=(g,t)=>({x:(1-t)**2*g.p1.x+2*(1-t)*t*g.c.x+t*t*g.p2.x,y:(1-t)**2*g.p1.y+2*(1-t)*t*g.c.y+t*t*g.p2.y});
 function render(){
  const f=fr();let h='';
  for(const e of G.edges){
-  const a=G.nd(e.u),b=G.nd(e.v),dx=b.x-a.x,dy=b.y-a.y,L=Math.hypot(dx,dy)||1,ux=dx/L,uy=dy/L,px=-uy,py=ux;
-  const o=G.directed&&G.edges.some(z=>z.u===e.v&&z.v===e.u)?8:0;
-  const st=f.e[G.key(e.u,e.v)],c=st&&st!=='unvisited'?col(st):null,isP=st==='path',s=sel&&sel.e===e;
+  const g=geo(e),st=f.e[G.key(e.u,e.v)],c=st&&st!=='unvisited'?col(st):null,isP=st==='path',s=sel&&sel.e===e;
   const stk=s?'var(--ac)':c||'var(--ed)',sw=(isP?SK.pathWidth:SK.width)+(s?1:0),da=isP?'':DASH[SK.line]||'';
-  const x1=a.x+px*o,y1=a.y+py*o,x2=b.x+px*o-(G.directed?ux*R:0),y2=b.y+py*o-(G.directed?uy*R:0);
-  h+=`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${stk}" stroke-width="${sw}" ${da?`stroke-dasharray="${da}"`:''} ${SK.line==='dotted'?'stroke-linecap="round"':''}/>`;
-  if(G.directed)h+=`<polygon fill="${stk}" points="${x2},${y2} ${x2-ux*13+px*5},${y2-uy*13+py*5} ${x2-ux*13-px*5},${y2-uy*13-py*5}"/>`;
-  if(G.weighted)h+=`<text x="${(a.x+b.x)/2+px*(o*1.5+10)}" y="${(a.y+b.y)/2+py*(o*1.5+10)+4}" text-anchor="middle" fill="var(--fg)" stroke="var(--bg)" stroke-width="4" paint-order="stroke" style="font-size:calc(var(--fs,14px) - 2px)">${e.w}</text>`;
+  const tip=g.p2,bx=tip.x-(G.directed?g.ax*11:0),by=tip.y-(G.directed?g.ay*11:0); // la línea termina en la base de la flecha
+  h+=`<path d="M${g.p1.x} ${g.p1.y}Q${g.c.x} ${g.c.y} ${bx} ${by}" fill="none" stroke="${stk}" stroke-width="${sw}" ${da?`stroke-dasharray="${da}"`:''} ${SK.line==='dotted'?'stroke-linecap="round"':''}/>`;
+  if(G.directed)h+=`<polygon fill="${stk}" points="${tip.x},${tip.y} ${tip.x-g.ax*13-g.ay*5},${tip.y-g.ay*13+g.ax*5} ${tip.x-g.ax*13+g.ay*5},${tip.y-g.ay*13-g.ax*5}"/>`;
+  if(G.weighted){const m=bez(g,.5);h+=`<text x="${m.x+g.px*9}" y="${m.y+g.py*9+4}" text-anchor="middle" fill="var(--fg)" stroke="var(--bg)" stroke-width="4" paint-order="stroke" style="font-size:calc(var(--fs,14px) - 2px)">${e.w}</text>`}
  }
  if(drag&&drag.mode==='edge'&&drag.cur){const a=drag.n;h+=`<line x1="${a.x}" y1="${a.y}" x2="${drag.cur.x}" y2="${drag.cur.y}" stroke="var(--ac)" stroke-dasharray="4 4"/>`}
  for(const n of G.nodes){
@@ -312,24 +484,29 @@ function reps(){
  $('#rep').innerHTML=h;
  for(const id of['s','t']){const el=$('#'+id),v=el.value;el.innerHTML=ids.map(i=>`<option>${i}</option>`).join('');if(ids.includes(v))el.value=v;else if(id==='t'&&ids.length>1)el.value=ids[ids.length-1]}
 }
-function changed(){stop();frames=null;idx=0;Recorder.logsRef=[];reps();render()}
+function changed(){stop();frames=null;idx=0;Recorder.logsRef=[];if(ST!=='graph')layout();G.recalc();reps();if(ST!=='graph'){const r=heads()[0];if(r)$('#s').value=r.id}render()}
 
 /* ---- Edición inline (renombrar / peso) ---- */
 function edit(x,y,val,cb){const i=$('#ed');i.style.cssText=`display:block;left:${x-35}px;top:${y-14}px`;i.value=val;i.focus();i.select();
  i.onkeydown=ev=>{if(ev.key==='Enter'){const v=i.value.trim();i.style.display='none';cb(v)}else if(ev.key==='Escape')i.style.display='none'};i.onblur=()=>i.style.display='none'}
-const editW=e=>{const a=G.nd(e.u),b=G.nd(e.v);edit((a.x+b.x)/2,(a.y+b.y)/2,e.w,v=>{const n=parseFloat(v);if(!isNaN(n)){e.w=n;changed()}})};
+const editW=e=>{if(G.autoW)return msg('Peso automático: se calcula por distancia');const a=G.nd(e.u),b=G.nd(e.v);edit((a.x+b.x)/2,(a.y+b.y)/2,e.w,v=>{const n=parseFloat(v);if(!isNaN(n)){e.w=n;changed()}})};
 
 /* ---- Modos de edición ---- */
 let mode='v';
 const HINTS={v:'Mover: arrastra nodos · clic selecciona · Supr elimina · doble clic renombra / edita peso · clic en vacío deselecciona',n:'Nodo: clic en el lienzo crea un nodo',e:'Arista: arrastra de origen a destino, o clic en origen y luego en destino (clic derecho también)',d:'Eliminar: clic sobre un nodo o arista'};
 function setMode(m){mode=m;pend=null;drag=null;document.querySelectorAll('#tools button').forEach(b=>b.classList.toggle('on',b.dataset.m===m));$('#hint').textContent=HINTS[m];svg.style.cursor={v:'default',n:'copy',e:'crosshair',d:'not-allowed'}[m];render()}
 document.querySelectorAll('#tools button').forEach(b=>b.onclick=()=>setMode(b.dataset.m));
-const link=(u,v)=>{const e=G.addEdge(u,v);if(e){changed();if(G.weighted)editW(e)}};
+const link=(u,v)=>{const e=G.addEdge(u,v);if(e){changed();if(G.weighted&&!G.autoW)editW(e)}};
+const msg=t=>{$('#hint').textContent=t;clearTimeout(msg.t);msg.t=setTimeout(()=>$('#hint').textContent=HINTS[mode],2000)};
+let raf=0;const soon=()=>raf||(raf=requestAnimationFrame(()=>{raf=0;render();reps()})); // 1 repintado por frame
 svg.onpointerdown=ev=>{
  if(ev.button!==0)return;$('#ed').style.display='none';
  const p=pt(ev),n=nodeAt(p.x,p.y),e=n?null:edgeAt(p.x,p.y);
  if(mode==='v'){
-  if(n){sel={n:n.id};drag={n,mode:'move',x:p.x,y:p.y,dx:n.x-p.x,dy:n.y-p.y};svg.setPointerCapture(ev.pointerId)}else sel=e?{e}:null;
+  if(n){sel={n:n.id};
+   if(playing||busy){msg('⏸ Pausa la reproducción para mover nodos');render();return} // evita carreras con Recorder/Player
+   if(G.autoW&&frames)invalidate(); // los pesos van a cambiar: la grabación anterior ya no es válida
+   drag={n,mode:'move',x:p.x,y:p.y,dx:n.x-p.x,dy:n.y-p.y};svg.setPointerCapture(ev.pointerId)}else sel=e?{e}:null;
  }else if(mode==='n'){if(!n){sel={n:G.addNode(p.x,p.y).id};changed()}}
  else if(mode==='e'){
   if(n&&pend&&pend!==n.id){link(pend,n.id);pend=null}
@@ -338,10 +515,13 @@ svg.onpointerdown=ev=>{
  render()};
 svg.onpointermove=ev=>{if(!drag)return;const p=pt(ev);
  if(Math.hypot(p.x-drag.x,p.y-drag.y)>5)drag.moved=true;
- if(drag.mode==='move'){drag.n.x=p.x+drag.dx;drag.n.y=p.y+drag.dy}else drag.cur=p;render()};
-svg.onpointerup=ev=>{if(!drag)return;const t=nodeAt(pt(ev).x,pt(ev).y);
+ if(drag.mode==='move'){const r=svg.getBoundingClientRect(); // clamp al viewport
+  drag.n.x=Math.min(r.width-R,Math.max(R,p.x+drag.dx));drag.n.y=Math.min(r.height-R,Math.max(R,p.y+drag.dy));
+  G.recalc(drag.n.id);soon()}else{drag.cur=p;render()}};
+svg.onpointerup=ev=>{if(!drag)return;if(drag.mode==='move')reps();const t=nodeAt(pt(ev).x,pt(ev).y);
  if(drag.mode==='edge'){if(drag.moved&&t&&t!==drag.n){link(drag.n.id,t.id);pend=null}else pend=drag.moved?null:(pend===drag.n.id?null:drag.n.id)}
  drag=null;render()};
+svg.onpointercancel=()=>{drag=null;render();reps()};
 svg.oncontextmenu=ev=>{ev.preventDefault();const p=pt(ev),n=nodeAt(p.x,p.y);
  if(!n)pend=null;else if(!pend)pend=n.id;else{if(pend!==n.id)link(pend,n.id);pend=null}render()};
 svg.ondblclick=ev=>{const p=pt(ev),n=nodeAt(p.x,p.y);
@@ -355,13 +535,16 @@ document.addEventListener('change',e=>{if(e.target.tagName==='SELECT')e.target.b
 /* ============ Ejecución segura + Player ============ */
 // Nota: Function constructor NO es un sandbox real; se sombrean globales peligrosos y se limita nº de pasos.
 const AF=Object.getPrototypeOf(async function(){}).constructor;
-async function run(){
+let busy=false;
+async function run(){busy=true;try{await run0()}finally{busy=false}}
+async function run0(){
  const rec=new Recorder(G);Recorder.logsRef=rec.logs;
  try{const fn=new AF('graph','visualizer','params','window','document','fetch','localStorage','globalThis','parent','top','XMLHttpRequest',$('#code').value);
   await fn(G.api(),rec,{start:$('#s').value,end:$('#t').value});
  }catch(e){try{await rec.log('❌ '+e.message)}catch(_){}}
  frames=rec.frames;idx=0;render()}
 const delay=()=>1100-$('#sp').value*100;
+const invalidate=()=>{stop();frames=null;idx=0;Recorder.logsRef=[]};
 function stop(){playing=false;clearTimeout(timer);$('#pl').textContent='▶ Reproducir';$('#pl').classList.add('on')}
 async function play(){
  if(playing)return stop();
@@ -375,14 +558,16 @@ $('#bk').onclick=()=>{stop();idx=0;render()};
 $('#s').onchange=$('#t').onchange=()=>{stop();frames=null;idx=0;Recorder.logsRef=[];render()};
 
 /* ============ UI: opciones, editor, tabs ============ */
-$('#dir').onchange=$('#wt').onchange=()=>{G.setOpts($('#dir').checked,$('#wt').checked);changed()};
+$('#auto').onchange=e=>{G.autoW=e.target.checked;if(G.autoW){$('#wt').checked=true;G.setOpts(G.directed,true)}changed()};
+$('#esc').oninput=e=>{G.scale=Math.max(1,+e.target.value||10);changed()};
+$('#dir').onchange=$('#wt').onchange=()=>{if(!$('#wt').checked){$('#auto').checked=false;G.autoW=false}G.setOpts($('#dir').checked,$('#wt').checked);changed()};
 $('#clr').onclick=()=>{G.nodes=[];G.edges=[];sel=null;changed()};
 $('#rt').onclick=()=>{repMode=repMode==='list'?'matrix':'list';$('#rt').textContent='Ver: '+(repMode==='list'?'Lista':'Matriz');reps()};
 $('#smp').onclick=()=>{G.nodes=[];G.edges=[];const W=svg.clientWidth||600,P=[[.12,.3],[.35,.12],[.35,.6],[.62,.2],[.62,.75],[.88,.45]];
  P.forEach(([a,b])=>G.addNode(a*W,b*(svg.clientHeight||400)+30));
  [['A','B',4],['A','C',2],['B','C',1],['B','D',5],['C','E',8],['D','E',2],['D','F',6],['E','F',3]].forEach(([u,v,w])=>G.addEdge(u,v).w=w);
  G.setOpts(false,true);$('#dir').checked=false;$('#wt').checked=true;changed()};
-$('#alg').innerHTML=Object.keys(ALGS).map(k=>`<option>${k}</option>`).join('')+'<option>Personalizado</option>';
+
 $('#alg').onchange=e=>{if(e.target.value!=='Personalizado'){$('#code').value=ALGS[e.target.value];hl()}stop();frames=null;idx=0;render()};
 document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tabs button,.pane').forEach(x=>x.classList.remove('on'));b.classList.add('on');$('#'+b.dataset.p).classList.add('on')});
 function hl(){ // resaltado de sintaxis ligero (overlay)
@@ -392,6 +577,7 @@ $('#code').oninput=()=>{hl();$('#alg').value='Personalizado';frames=null;stop()}
 $('#code').onscroll=e=>{$('#hl').scrollTop=e.target.scrollTop;$('#hl').scrollLeft=e.target.scrollLeft};
 $('#code').onkeydown=e=>{if(e.key==='Tab'){e.preventDefault();const t=e.target,s=t.selectionStart;t.setRangeText('  ',s,t.selectionEnd,'end');t.oninput()}};
 $('#code').value=ALGS.BFS;hl();Recorder.logsRef=[];
+const gSmp=$('#smp').onclick;$('#smp').onclick=loadSample;$('#st').onchange=e=>setStruct(e.target.value);fillAlg('graph');
 Object.keys(SKINS).forEach(id=>registerSkin(id,SKINS[id]));
 $('#theme').onchange=e=>applySkin(SKINS[e.target.value]);
 $('#skj').value=JSON.stringify({name:'Mi tema',font:'monospace',shape:'hex',line:'dashed',width:3,pathWidth:5,palette:{bg:'#101820',panel:'#1b2733',text:'#f2f2f2',border:'#3a4a5a',edge:'#7f8c9a',accent:'#ffb000'},states:{unvisited:'#2b3a49',queued:'#ffb000',current:'#00c2ff',visited:'#2ecc71',path:'#ff5e8a'}},null,2);
