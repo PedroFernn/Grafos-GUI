@@ -1,0 +1,401 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Graph Lab</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap">
+<style>
+:root{--bg:#0f172a;--pn:#1e293b;--fg:#e2e8f0;--mu:#94a3b8;--bd:#334155;--ed:#64748b;--ac:#38bdf8;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:light){:root:not([data-theme=dark]){--bg:#f1f5f9;--pn:#fff;--fg:#0f172a;--mu:#475569;--bd:#cbd5e1;--ed:#94a3b8;--ac:#0284c7}}
+:root[data-theme=light]{--bg:#f1f5f9;--pn:#fff;--fg:#0f172a;--mu:#475569;--bd:#cbd5e1;--ed:#94a3b8;--ac:#0284c7}
+*{box-sizing:border-box}html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--fg);font:var(--fs,14px) var(--font,system-ui,Segoe UI,sans-serif);display:flex;flex-direction:column}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 12px;background:var(--pn);border-bottom:1px solid var(--bd)}
+.bar b{margin-right:6px}
+button,select,input[type=text],input:not([type]){background:var(--bg);color:var(--fg);border:1px solid var(--bd);border-radius:6px;padding:5px 9px;font:inherit}
+button{cursor:pointer}button:hover{border-color:var(--ac)}
+button.on{background:var(--ac);color:#04121f;border-color:var(--ac)}
+label{display:flex;gap:4px;align-items:center;color:var(--mu)}
+main{flex:1;display:grid;grid-template-columns:1fr 400px;min-height:0}
+#cv{position:relative;min-height:300px}
+svg{width:100%;height:100%;display:block;touch-action:none;cursor:crosshair}
+#ed{position:absolute;display:none;width:70px}
+aside{border-left:1px solid var(--bd);background:var(--pn);display:flex;flex-direction:column;min-height:0}
+.tabs{display:flex}.tabs button{flex:1;border-radius:0;border:0;border-bottom:2px solid transparent}
+.tabs button.on{background:none;color:var(--ac);border-color:var(--ac)}
+.pane{display:none;flex:1;overflow:auto;padding:8px;min-height:0}.pane.on{display:flex;flex-direction:column}
+#log div{padding:2px 0;border-bottom:1px solid var(--bd);font-family:ui-monospace,monospace;font-size:12px}
+#ds{font-family:ui-monospace,monospace;font-size:12px;color:var(--mu);white-space:pre-wrap;border-top:2px solid var(--bd);padding-top:6px;margin-top:6px}
+table{border-collapse:collapse;font-family:ui-monospace,monospace;font-size:12px}td,th{border:1px solid var(--bd);padding:3px 7px;text-align:center}
+.cw{position:relative;flex:1;min-height:240px}
+.cw pre,.cw textarea{position:absolute;inset:0;margin:0;padding:8px;font:12px/1.5 ui-monospace,monospace;white-space:pre;overflow:auto;tab-size:2;border:1px solid var(--bd);border-radius:6px;background:var(--bg)}
+.cw textarea{color:transparent;caret-color:var(--fg);background:transparent;resize:none;outline:0}
+.k{color:#c084fc}.s{color:#4ade80}.c{color:#64748b}.n{color:#fbbf24}
+.hint{color:var(--mu);font-size:12px;padding:4px 12px}
+@media(max-width:800px){main{grid-template-columns:1fr;grid-template-rows:55vh 1fr}aside{border-left:0;border-top:1px solid var(--bd)}}
+button,select,input,.cw pre,.cw textarea{border-radius:var(--r,6px)}
+button,select{box-shadow:var(--sh,none)}button:active{transform:translate(1px,1px)}
+#tools{position:absolute;top:8px;left:8px;display:flex;gap:3px;z-index:2;background:var(--pn);border:1px solid var(--bd);border-radius:var(--r,8px);padding:3px;box-shadow:var(--sh,none)}
+#tools button{border:0;box-shadow:none}
+body[data-scan]::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:9;background:repeating-linear-gradient(0deg,rgba(0,0,0,.22) 0 1px,transparent 1px 3px)}
+#skj{flex:1;min-height:220px;font:12px/1.4 ui-monospace,monospace;background:var(--bg);color:var(--fg);border:1px solid var(--bd);resize:none}
+</style></head><body>
+<div class="bar">
+ <b>Graph Lab</b>
+ <label><input type="checkbox" id="dir"> Dirigido</label>
+ <label><input type="checkbox" id="wt"> Ponderado</label>
+ <button id="smp">Ejemplo</button><label>Tema <select id="theme"></select></label><button id="clr">Limpiar</button>
+ <span style="flex:1"></span>
+ <select id="alg"></select>
+ <label>Inicio <select id="s"></select></label><label>Destino <select id="t"></select></label>
+</div>
+<div class="bar">
+ <button id="bk" title="Paso atrás">⏮</button><button id="sb" title="Paso atrás">◀</button>
+ <button id="pl" class="on" title="Reproducir/Pausar">▶ Reproducir</button>
+ <button id="sf" title="Paso adelante">▶|</button>
+ <label>Velocidad <input type="range" id="sp" min="1" max="10" value="5"></label>
+ <span id="ct" style="color:var(--mu)"></span>
+</div>
+<main>
+ <section id="cv"><div id="tools"><button data-m="v">↖ Mover (V)</button><button data-m="n">➕ Nodo (N)</button><button data-m="e">🔗 Arista (E)</button><button data-m="d">🗑️ Eliminar (D)</button></div><svg id="svg"></svg><input id="ed"></section>
+ <aside>
+  <div class="tabs"><button data-p="pLog" class="on">Log</button><button data-p="pRep">Grafo</button><button data-p="pCode">Código</button><button data-p="pSkin">Tema</button></div>
+  <div class="pane on" id="pLog"><div id="log"></div><div id="ds"></div></div>
+  <div class="pane" id="pRep"><button id="rt" style="align-self:flex-start;margin-bottom:8px">Ver: Lista</button><div id="rep"></div></div>
+  <div class="pane" id="pCode"><div class="cw"><pre id="hl"></pre><textarea id="code" spellcheck="false"></textarea></div>
+   <div class="hint">API: visualizer.visitNode(id, estado) · highlightEdge(u,v,estado) · log(msg) · setStructure(nombre,valor) · showPath([ids]). Estados: unvisited, queued, current, visited, path (o color CSS). Datos: graph.nodes, graph.edges, graph.neighbors(id), graph.h(a,b), params.start/end.</div></div>
+ <div class="pane" id="pSkin"><textarea id="skj" spellcheck="false"></textarea><button id="ska" style="margin-top:8px;align-self:flex-start">Aplicar tema</button><div class="hint" id="skm">JSON: name, font, fontSize, radius, shadow, shape (circle|square|hex|pixel), line (solid|dashed|dotted|dither), width, pathWidth, crisp, scan, palette{bg,panel,text,muted,border,edge,accent}, states{unvisited,queued,current,visited,path}. También: registerSkin(id, cfg) en consola.</div></div></aside>
+</main>
+<div class="hint" id="hint"></div>
+<script>
+const $=s=>document.querySelector(s),R=20;
+const COLORS={unvisited:'#334155',queued:'#f59e0b',current:'#38bdf8',visited:'#22c55e',path:'#a855f7'};
+const col=s=>COLORS[s]||s;
+
+/* ============ GraphEngine ============ */
+class GraphEngine{
+ constructor(){this.nodes=[];this.edges=[];this.directed=false;this.weighted=false}
+ key(u,v){return this.directed?u+'>'+v:[u,v].sort().join('-')}
+ nd(id){return this.nodes.find(n=>n.id===id)}
+ nextName(){for(let i=0;i<26;i++){const c=String.fromCharCode(65+i);if(!this.nd(c))return c}return'N'+this.nodes.length}
+ addNode(x,y){const n={id:this.nextName(),x,y};this.nodes.push(n);return n}
+ addEdge(u,v){if(u===v||this.edges.some(e=>this.key(e.u,e.v)===this.key(u,v)))return null;const e={u,v,w:1};this.edges.push(e);return e}
+ rename(o,n){if(!n||this.nd(n))return false;this.nd(o).id=n;this.edges.forEach(e=>{if(e.u===o)e.u=n;if(e.v===o)e.v=n});return true}
+ delNode(id){this.nodes=this.nodes.filter(n=>n.id!==id);this.edges=this.edges.filter(e=>e.u!==id&&e.v!==id)}
+ delEdge(e){this.edges=this.edges.filter(x=>x!==e)}
+ setOpts(d,w){this.directed=d;this.weighted=w;const s=new Set();this.edges=this.edges.filter(e=>{const k=this.key(e.u,e.v);return s.has(k)?false:(s.add(k),true)})}
+ w(e){return this.weighted?e.w:1}
+ // Vista de solo lectura que reciben los algoritmos
+ api(){
+  const g=this,E=g.edges.map(e=>({from:e.u,to:e.v,weight:g.w(e)}));
+  const ratios=g.edges.map(e=>g.w(e)/(Math.hypot(g.nd(e.u).x-g.nd(e.v).x,g.nd(e.u).y-g.nd(e.v).y)||1));
+  const k=ratios.length?Math.min(...ratios):0;
+  return Object.freeze({directed:g.directed,weighted:g.weighted,nodes:g.nodes.map(n=>n.id),edges:E,
+   neighbors:id=>{const o=[];g.edges.forEach(e=>{if(e.u===id)o.push({to:e.v,weight:g.w(e)});else if(!g.directed&&e.v===id)o.push({to:e.u,weight:g.w(e)})});return o},
+   h:(a,b)=>{const p=g.nd(a),q=g.nd(b);return Math.hypot(p.x-q.x,p.y-q.y)*k}}); // heurística admisible: distancia euclídea × mínima razón peso/longitud
+ }
+}
+
+/* ============ Recorder: implementa la API `visualizer` ============ */
+// Ejecuta el algoritmo UNA vez, graba "frames" y luego el Player los reproduce (permite paso atrás y no congela la UI).
+class Recorder{
+ constructor(g){this.g=g;this.s={n:{},e:{},ds:{}};this.logs=[];this.cnt=0;this.frames=[this.snap()]}
+ snap(){return{n:{...this.s.n},e:{...this.s.e},ds:JSON.parse(JSON.stringify(this.s.ds,(k,v)=>v===Infinity?'∞':v)),l:this.logs.length}}
+ async push(){
+  if(++this.cnt>5000)throw Error('Límite de 5000 pasos (¿bucle infinito?)');
+  this.frames.push(this.snap());
+  if(this.cnt%100===0)await new Promise(r=>setTimeout(r)); // cede el hilo a la UI
+ }
+ async visitNode(id,st='visited'){this.s.n[id]=st;await this.push()}
+ async highlightEdge(u,v,st='path'){this.s.e[this.g.key(u,v)]=st;await this.push()}
+ async log(m){this.logs.push(String(m));await this.push()}
+ async setStructure(name,val){this.s.ds[name]=Array.isArray(val)?[...val]:(val&&typeof val==='object'?{...val}:val);await this.push()}
+ async showPath(p){for(let i=0;i<p.length;i++){this.s.n[p[i]]='path';if(i)this.s.e[this.g.key(p[i-1],p[i])]='path';await this.push()}}
+}
+
+/* ============ Algoritmos predeterminados (editables) ============ */
+const ALGS={
+BFS:`const q=[params.start], seen=new Set(q);
+await visualizer.visitNode(params.start,'queued');
+await visualizer.setStructure('Cola',q);
+while(q.length){
+  const u=q.shift();
+  await visualizer.visitNode(u,'current');
+  await visualizer.log('Sacar '+u+' de la cola');
+  for(const {to} of graph.neighbors(u)){
+    if(seen.has(to)) continue;
+    seen.add(to); q.push(to);
+    await visualizer.highlightEdge(u,to,'queued');
+    await visualizer.visitNode(to,'queued');
+  }
+  await visualizer.visitNode(u,'visited');
+  await visualizer.setStructure('Cola',q);
+}
+await visualizer.log('BFS terminado');`,
+DFS:`const seen=new Set(), st=[];
+async function dfs(u){
+  seen.add(u); st.push(u);
+  await visualizer.visitNode(u,'current');
+  await visualizer.setStructure('Pila (recursión)',st);
+  await visualizer.log('Visitar '+u);
+  for(const {to} of graph.neighbors(u)) if(!seen.has(to)){
+    await visualizer.highlightEdge(u,to,'current');
+    await dfs(to);
+    await visualizer.highlightEdge(u,to,'visited');
+  }
+  await visualizer.visitNode(u,'visited'); st.pop();
+  await visualizer.setStructure('Pila (recursión)',st);
+}
+await dfs(params.start);
+await visualizer.log('DFS terminado');`,
+Dijkstra:`const {start,end}=params, dist={}, prev={}, done=new Set();
+for(const n of graph.nodes) dist[n]=Infinity;
+dist[start]=0; const pq=[[0,start]];
+await visualizer.visitNode(start,'queued');
+await visualizer.setStructure('dist',dist);
+while(pq.length){
+  pq.sort((a,b)=>a[0]-b[0]);
+  const [d,u]=pq.shift();
+  if(done.has(u)) continue;
+  done.add(u);
+  await visualizer.visitNode(u,'current');
+  await visualizer.log('Extraer '+u+' (d='+d+')');
+  if(u===end) break;
+  for(const {to,weight} of graph.neighbors(u)){
+    if(done.has(to)||d+weight>=dist[to]) continue;
+    dist[to]=d+weight; prev[to]=u; pq.push([dist[to],to]);
+    await visualizer.highlightEdge(u,to,'queued');
+    await visualizer.visitNode(to,'queued');
+    await visualizer.log('Relajar '+u+'→'+to+': dist='+dist[to]);
+  }
+  await visualizer.visitNode(u,'visited');
+  await visualizer.setStructure('dist',dist);
+  await visualizer.setStructure('Cola prioridad',pq.map(x=>x[1]+':'+x[0]));
+}
+if(end && dist[end]<Infinity){
+  const path=[end]; while(prev[path[0]]!==undefined) path.unshift(prev[path[0]]);
+  await visualizer.showPath(path);
+  await visualizer.log('Camino: '+path.join(' → ')+' (costo '+dist[end]+')');
+}`,
+'A*':`const {start,end}=params;
+if(!end || end===start){ await visualizer.log('Elige un destino distinto del inicio'); return; }
+const g={},f={},prev={},open=[start],closed=new Set();
+for(const n of graph.nodes) g[n]=Infinity;
+g[start]=0; f[start]=graph.h(start,end);
+await visualizer.visitNode(start,'queued');
+while(open.length){
+  open.sort((a,b)=>f[a]-f[b]);
+  const u=open.shift();
+  await visualizer.visitNode(u,'current');
+  await visualizer.log('Expandir '+u+' (f='+f[u].toFixed(1)+')');
+  if(u===end){
+    const path=[u]; while(prev[path[0]]!==undefined) path.unshift(prev[path[0]]);
+    await visualizer.showPath(path);
+    await visualizer.log('Camino: '+path.join(' → ')+' (costo '+g[u]+')'); return;
+  }
+  closed.add(u);
+  for(const {to,weight} of graph.neighbors(u)){
+    if(closed.has(to)) continue;
+    const t=g[u]+weight;
+    if(t<g[to]){
+      g[to]=t; prev[to]=u; f[to]=t+graph.h(to,end);
+      if(!open.includes(to)) open.push(to);
+      await visualizer.highlightEdge(u,to,'queued');
+      await visualizer.visitNode(to,'queued');
+    }
+  }
+  await visualizer.visitNode(u,'visited');
+  await visualizer.setStructure('Abiertos (f)',open.map(n=>n+':'+f[n].toFixed(1)));
+}
+await visualizer.log('Sin camino');`,
+Prim:`// Trata el grafo como no dirigido
+const inT=new Set([params.start]); let total=0;
+await visualizer.visitNode(params.start,'visited');
+while(true){
+  let best=null;
+  for(const e of graph.edges){
+    if(inT.has(e.from)!==inT.has(e.to) && (!best||e.weight<best.weight)) best=e;
+  }
+  if(!best) break;
+  const v=inT.has(best.from)?best.to:best.from;
+  inT.add(v); total+=best.weight;
+  await visualizer.highlightEdge(best.from,best.to,'path');
+  await visualizer.visitNode(v,'visited');
+  await visualizer.setStructure('Árbol',[...inT]);
+  await visualizer.log('Añadir '+best.from+'-'+best.to+' (w='+best.weight+')');
+}
+await visualizer.log('Peso total MST: '+total);`,
+Kruskal:`// Trata el grafo como no dirigido
+const p={}; for(const n of graph.nodes) p[n]=n;
+const find=x=>p[x]===x?x:(p[x]=find(p[x]));
+const E=[...graph.edges].sort((a,b)=>a.weight-b.weight); let total=0;
+await visualizer.setStructure('Aristas ordenadas',E.map(e=>e.from+'-'+e.to+':'+e.weight));
+for(const e of E){
+  await visualizer.highlightEdge(e.from,e.to,'current');
+  const a=find(e.from), b=find(e.to);
+  if(a!==b){
+    p[a]=b; total+=e.weight;
+    await visualizer.highlightEdge(e.from,e.to,'path');
+    await visualizer.visitNode(e.from,'visited'); await visualizer.visitNode(e.to,'visited');
+    await visualizer.log('Aceptada '+e.from+'-'+e.to+' (w='+e.weight+')');
+  } else {
+    await visualizer.highlightEdge(e.from,e.to,'unvisited');
+    await visualizer.log('Descartada '+e.from+'-'+e.to+' (forma ciclo)');
+  }
+}
+await visualizer.log('Peso total MST: '+total);`};
+
+/* ============ Skins (temas) ============ */
+const BASE={name:'Moderno',shape:'circle',line:'solid',width:2.5,pathWidth:4,palette:{},states:{unvisited:'#334155',queued:'#f59e0b',current:'#38bdf8',visited:'#22c55e',path:'#a855f7'}};
+const SKINS={modern:BASE,
+ pixel:{name:'Pixel Art',font:"'Press Start 2P','VT323',monospace",fontSize:'10px',radius:'0px',shadow:'3px 3px 0 #000',shape:'pixel',line:'dither',width:4,pathWidth:6,crisp:true,scan:true,
+  palette:{bg:'#0d0221',panel:'#1a0b3b',text:'#39ff14',muted:'#b967ff',border:'#ff2e97',edge:'#6c4ab6',accent:'#00f0ff'},
+  states:{unvisited:'#2a1a5e',queued:'#ffd23f',current:'#00f0ff',visited:'#39ff14',path:'#ff2e97'}}};
+const PAL={bg:'--bg',panel:'--pn',text:'--fg',muted:'--mu',border:'--bd',edge:'--ed',accent:'--ac'};
+let SK=BASE,applied=[];
+function applySkin(c){
+ const sk={...BASE,...c,palette:{...c.palette},states:{...BASE.states,...c.states}};SK=sk;
+ const css={};for(const k in sk.palette)if(PAL[k])css[PAL[k]]=sk.palette[k];
+ if(sk.font)css['--font']=sk.font;if(sk.fontSize)css['--fs']=sk.fontSize;if(sk.radius)css['--r']=sk.radius;if(sk.shadow)css['--sh']=sk.shadow;
+ const r=document.documentElement.style;applied.forEach(k=>r.removeProperty(k));applied=Object.keys(css);applied.forEach(k=>r.setProperty(k,css[k]));
+ Object.assign(COLORS,sk.states);document.body.toggleAttribute('data-scan',!!sk.scan);
+ svg.style.imageRendering=sk.crisp?'pixelated':'';svg.setAttribute('shape-rendering',sk.crisp?'crispEdges':'auto');render()}
+function registerSkin(id,cfg){SKINS[id]=cfg;const t=$('#theme');if(![...t.options].some(o=>o.value===id))t.add(new Option(cfg.name||id,id))}
+window.registerSkin=registerSkin;
+const DASH={solid:'',dashed:'9 6',dotted:'1 7',dither:'4 4'};
+const PX=[[-12,-20],[12,-20],[12,-16],[16,-16],[16,-12],[20,-12],[20,12],[16,12],[16,16],[12,16],[12,20],[-12,20],[-12,16],[-16,16],[-16,12],[-20,12],[-20,-12],[-16,-12],[-16,-16],[-12,-16]];
+function shapeSvg(n,fill,stroke,sw,dash){
+ const a=`fill="${fill}" stroke="${stroke}" stroke-width="${sw}" ${dash?'stroke-dasharray="4 3"':''}`,pts=(P,o=0)=>P.map(([x,y])=>`${n.x+x+o},${n.y+y+o}`).join(' ');
+ switch(SK.shape){
+  case'square':return`<rect x="${n.x-R}" y="${n.y-R}" width="${2*R}" height="${2*R}" rx="3" ${a}/>`;
+  case'pixel':return`<polygon points="${pts(PX,4)}" fill="#000" opacity=".5"/><polygon points="${pts(PX)}" ${a}/>`;
+  case'hex':return`<polygon points="${pts([0,1,2,3,4,5].map(i=>[R*1.1*Math.cos(i*Math.PI/3),R*1.1*Math.sin(i*Math.PI/3)]))}" ${a}/>`;
+  default:return`<circle cx="${n.x}" cy="${n.y}" r="${R}" ${a}/>`}}
+
+/* ============ Estado + Canvas ============ */
+const G=new GraphEngine(),svg=$('#svg');
+let frames=null,idx=0,playing=false,timer=null,sel=null,pend=null,drag=null,repMode='list';
+const pt=ev=>{const r=svg.getBoundingClientRect();return{x:ev.clientX-r.left,y:ev.clientY-r.top}};
+const nodeAt=(x,y)=>G.nodes.find(n=>Math.hypot(n.x-x,n.y-y)<=R);
+const segD=(x,y,a,b)=>{const dx=b.x-a.x,dy=b.y-a.y;let t=((x-a.x)*dx+(y-a.y)*dy)/(dx*dx+dy*dy||1);t=Math.max(0,Math.min(1,t));return Math.hypot(x-a.x-t*dx,y-a.y-t*dy)};
+const edgeAt=(x,y)=>G.edges.find(e=>segD(x,y,G.nd(e.u),G.nd(e.v))<9);
+const fr=()=>frames?frames[idx]:{n:{},e:{},ds:{},l:0};
+
+function render(){
+ const f=fr();let h='';
+ for(const e of G.edges){
+  const a=G.nd(e.u),b=G.nd(e.v),dx=b.x-a.x,dy=b.y-a.y,L=Math.hypot(dx,dy)||1,ux=dx/L,uy=dy/L,px=-uy,py=ux;
+  const o=G.directed&&G.edges.some(z=>z.u===e.v&&z.v===e.u)?8:0;
+  const st=f.e[G.key(e.u,e.v)],c=st&&st!=='unvisited'?col(st):null,isP=st==='path',s=sel&&sel.e===e;
+  const stk=s?'var(--ac)':c||'var(--ed)',sw=(isP?SK.pathWidth:SK.width)+(s?1:0),da=isP?'':DASH[SK.line]||'';
+  const x1=a.x+px*o,y1=a.y+py*o,x2=b.x+px*o-(G.directed?ux*R:0),y2=b.y+py*o-(G.directed?uy*R:0);
+  h+=`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${stk}" stroke-width="${sw}" ${da?`stroke-dasharray="${da}"`:''} ${SK.line==='dotted'?'stroke-linecap="round"':''}/>`;
+  if(G.directed)h+=`<polygon fill="${stk}" points="${x2},${y2} ${x2-ux*13+px*5},${y2-uy*13+py*5} ${x2-ux*13-px*5},${y2-uy*13-py*5}"/>`;
+  if(G.weighted)h+=`<text x="${(a.x+b.x)/2+px*(o*1.5+10)}" y="${(a.y+b.y)/2+py*(o*1.5+10)+4}" text-anchor="middle" fill="var(--fg)" stroke="var(--bg)" stroke-width="4" paint-order="stroke" style="font-size:calc(var(--fs,14px) - 2px)">${e.w}</text>`;
+ }
+ if(drag&&drag.mode==='edge'&&drag.cur){const a=drag.n;h+=`<line x1="${a.x}" y1="${a.y}" x2="${drag.cur.x}" y2="${drag.cur.y}" stroke="var(--ac)" stroke-dasharray="4 4"/>`}
+ for(const n of G.nodes){
+  const st=f.n[n.id]||'unvisited',s=sel&&sel.n===n.id,p=pend===n.id;
+  h+=shapeSvg(n,col(st),s?'var(--fg)':p?'#f59e0b':'var(--ed)',s||p?3:2,p)+`<text x="${n.x}" y="${n.y+4}" text-anchor="middle" fill="${st==='unvisited'?'var(--fg)':'#04121f'}" font-weight="600" pointer-events="none">${n.id}</text>`;
+ }
+ svg.innerHTML=h;
+ const lg=$('#log');lg.innerHTML=(frames?Recorder.logsRef.slice(0,f.l):[]).map((m,i)=>`<div>${i+1}. ${m.replace(/</g,'&lt;')}</div>`).join('');lg.parentNode.scrollTop=1e9;
+ $('#ds').textContent=Object.entries(f.ds).map(([k,v])=>k+': '+JSON.stringify(v)).join('\n');
+ $('#ct').textContent=frames?`Paso ${idx}/${frames.length-1}`:'';
+}
+function reps(){
+ const ids=G.nodes.map(n=>n.id);let h='';
+ if(repMode==='list'){
+  h='<table>'+ids.map(id=>{const nb=G.api().neighbors(id).map(x=>G.weighted?`${x.to}(${x.weight})`:x.to);return`<tr><th>${id}</th><td style="text-align:left">${nb.join(', ')||'—'}</td></tr>`}).join('')+'</table>';
+ }else{
+  h='<table><tr><th></th>'+ids.map(i=>`<th>${i}</th>`).join('')+'</tr>'+ids.map(r=>`<tr><th>${r}</th>`+ids.map(c=>{const e=G.edges.find(e=>(e.u===r&&e.v===c)||(!G.directed&&e.u===c&&e.v===r));return`<td>${e?G.w(e):0}</td>`}).join('')+'</tr>').join('')+'</table>';
+ }
+ $('#rep').innerHTML=h;
+ for(const id of['s','t']){const el=$('#'+id),v=el.value;el.innerHTML=ids.map(i=>`<option>${i}</option>`).join('');if(ids.includes(v))el.value=v;else if(id==='t'&&ids.length>1)el.value=ids[ids.length-1]}
+}
+function changed(){stop();frames=null;idx=0;Recorder.logsRef=[];reps();render()}
+
+/* ---- Edición inline (renombrar / peso) ---- */
+function edit(x,y,val,cb){const i=$('#ed');i.style.cssText=`display:block;left:${x-35}px;top:${y-14}px`;i.value=val;i.focus();i.select();
+ i.onkeydown=ev=>{if(ev.key==='Enter'){const v=i.value.trim();i.style.display='none';cb(v)}else if(ev.key==='Escape')i.style.display='none'};i.onblur=()=>i.style.display='none'}
+const editW=e=>{const a=G.nd(e.u),b=G.nd(e.v);edit((a.x+b.x)/2,(a.y+b.y)/2,e.w,v=>{const n=parseFloat(v);if(!isNaN(n)){e.w=n;changed()}})};
+
+/* ---- Modos de edición ---- */
+let mode='v';
+const HINTS={v:'Mover: arrastra nodos · clic selecciona · Supr elimina · doble clic renombra / edita peso · clic en vacío deselecciona',n:'Nodo: clic en el lienzo crea un nodo',e:'Arista: arrastra de origen a destino, o clic en origen y luego en destino (clic derecho también)',d:'Eliminar: clic sobre un nodo o arista'};
+function setMode(m){mode=m;pend=null;drag=null;document.querySelectorAll('#tools button').forEach(b=>b.classList.toggle('on',b.dataset.m===m));$('#hint').textContent=HINTS[m];svg.style.cursor={v:'default',n:'copy',e:'crosshair',d:'not-allowed'}[m];render()}
+document.querySelectorAll('#tools button').forEach(b=>b.onclick=()=>setMode(b.dataset.m));
+const link=(u,v)=>{const e=G.addEdge(u,v);if(e){changed();if(G.weighted)editW(e)}};
+svg.onpointerdown=ev=>{
+ if(ev.button!==0)return;$('#ed').style.display='none';
+ const p=pt(ev),n=nodeAt(p.x,p.y),e=n?null:edgeAt(p.x,p.y);
+ if(mode==='v'){
+  if(n){sel={n:n.id};drag={n,mode:'move',x:p.x,y:p.y,dx:n.x-p.x,dy:n.y-p.y};svg.setPointerCapture(ev.pointerId)}else sel=e?{e}:null;
+ }else if(mode==='n'){if(!n){sel={n:G.addNode(p.x,p.y).id};changed()}}
+ else if(mode==='e'){
+  if(n&&pend&&pend!==n.id){link(pend,n.id);pend=null}
+  else if(n){drag={n,mode:'edge',x:p.x,y:p.y};svg.setPointerCapture(ev.pointerId)}else pend=null;
+ }else if(n){G.delNode(n.id);sel=null;changed()}else if(e){G.delEdge(e);sel=null;changed()}
+ render()};
+svg.onpointermove=ev=>{if(!drag)return;const p=pt(ev);
+ if(Math.hypot(p.x-drag.x,p.y-drag.y)>5)drag.moved=true;
+ if(drag.mode==='move'){drag.n.x=p.x+drag.dx;drag.n.y=p.y+drag.dy}else drag.cur=p;render()};
+svg.onpointerup=ev=>{if(!drag)return;const t=nodeAt(pt(ev).x,pt(ev).y);
+ if(drag.mode==='edge'){if(drag.moved&&t&&t!==drag.n){link(drag.n.id,t.id);pend=null}else pend=drag.moved?null:(pend===drag.n.id?null:drag.n.id)}
+ drag=null;render()};
+svg.oncontextmenu=ev=>{ev.preventDefault();const p=pt(ev),n=nodeAt(p.x,p.y);
+ if(!n)pend=null;else if(!pend)pend=n.id;else{if(pend!==n.id)link(pend,n.id);pend=null}render()};
+svg.ondblclick=ev=>{const p=pt(ev),n=nodeAt(p.x,p.y);
+ if(n)edit(n.x,n.y,n.id,v=>{if(v&&v!==n.id&&G.rename(n.id,v)){sel={n:v};changed()}});
+ else{const e=edgeAt(p.x,p.y);if(e&&G.weighted)editW(e)}};
+document.onkeydown=ev=>{const a=document.activeElement;if(a.tagName==='TEXTAREA'||(a.tagName==='INPUT'&&a.type==='text'))return;
+ const k=ev.key.toLowerCase();if(!ev.ctrlKey&&!ev.metaKey&&k.length===1&&'vned'.includes(k)){setMode(k);return}
+ if(sel&&(ev.key==='Delete'||ev.key==='Backspace')){sel.n?G.delNode(sel.n):G.delEdge(sel.e);sel=null;changed()}};
+document.addEventListener('change',e=>{if(e.target.tagName==='SELECT')e.target.blur()});
+
+/* ============ Ejecución segura + Player ============ */
+// Nota: Function constructor NO es un sandbox real; se sombrean globales peligrosos y se limita nº de pasos.
+const AF=Object.getPrototypeOf(async function(){}).constructor;
+async function run(){
+ const rec=new Recorder(G);Recorder.logsRef=rec.logs;
+ try{const fn=new AF('graph','visualizer','params','window','document','fetch','localStorage','globalThis','parent','top','XMLHttpRequest',$('#code').value);
+  await fn(G.api(),rec,{start:$('#s').value,end:$('#t').value});
+ }catch(e){try{await rec.log('❌ '+e.message)}catch(_){}}
+ frames=rec.frames;idx=0;render()}
+const delay=()=>1100-$('#sp').value*100;
+function stop(){playing=false;clearTimeout(timer);$('#pl').textContent='▶ Reproducir';$('#pl').classList.add('on')}
+async function play(){
+ if(playing)return stop();
+ if(!frames)await run();if(idx>=frames.length-1)idx=0;
+ playing=true;$('#pl').textContent='⏸ Pausar';$('#pl').classList.remove('on');
+ const tick=()=>{if(!playing)return;if(idx<frames.length-1){idx++;render();timer=setTimeout(tick,delay())}else stop()};tick()}
+$('#pl').onclick=play;
+$('#sf').onclick=async()=>{stop();if(!frames)await run();if(idx<frames.length-1)idx++;render()};
+$('#sb').onclick=()=>{stop();if(frames&&idx>0)idx--;render()};
+$('#bk').onclick=()=>{stop();idx=0;render()};
+$('#s').onchange=$('#t').onchange=()=>{stop();frames=null;idx=0;Recorder.logsRef=[];render()};
+
+/* ============ UI: opciones, editor, tabs ============ */
+$('#dir').onchange=$('#wt').onchange=()=>{G.setOpts($('#dir').checked,$('#wt').checked);changed()};
+$('#clr').onclick=()=>{G.nodes=[];G.edges=[];sel=null;changed()};
+$('#rt').onclick=()=>{repMode=repMode==='list'?'matrix':'list';$('#rt').textContent='Ver: '+(repMode==='list'?'Lista':'Matriz');reps()};
+$('#smp').onclick=()=>{G.nodes=[];G.edges=[];const W=svg.clientWidth||600,P=[[.12,.3],[.35,.12],[.35,.6],[.62,.2],[.62,.75],[.88,.45]];
+ P.forEach(([a,b])=>G.addNode(a*W,b*(svg.clientHeight||400)+30));
+ [['A','B',4],['A','C',2],['B','C',1],['B','D',5],['C','E',8],['D','E',2],['D','F',6],['E','F',3]].forEach(([u,v,w])=>G.addEdge(u,v).w=w);
+ G.setOpts(false,true);$('#dir').checked=false;$('#wt').checked=true;changed()};
+$('#alg').innerHTML=Object.keys(ALGS).map(k=>`<option>${k}</option>`).join('')+'<option>Personalizado</option>';
+$('#alg').onchange=e=>{if(e.target.value!=='Personalizado'){$('#code').value=ALGS[e.target.value];hl()}stop();frames=null;idx=0;render()};
+document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tabs button,.pane').forEach(x=>x.classList.remove('on'));b.classList.add('on');$('#'+b.dataset.p).classList.add('on')});
+function hl(){ // resaltado de sintaxis ligero (overlay)
+ const t=$('#code').value;
+ $('#hl').innerHTML=t.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])).replace(/(\/\/.*)|('[^'\n]*'|`[^`]*`)|\b(const|let|var|await|async|function|return|for|of|if|else|while|break|continue|new|true|false|null|undefined|Infinity)\b|\b(\d+\.?\d*)\b/g,(m,c,s,k,n)=>c?`<span class=c>${m}</span>`:s?`<span class=s>${m}</span>`:k?`<span class=k>${m}</span>`:`<span class=n>${m}</span>`)+'\n'}
+$('#code').oninput=()=>{hl();$('#alg').value='Personalizado';frames=null;stop()};
+$('#code').onscroll=e=>{$('#hl').scrollTop=e.target.scrollTop;$('#hl').scrollLeft=e.target.scrollLeft};
+$('#code').onkeydown=e=>{if(e.key==='Tab'){e.preventDefault();const t=e.target,s=t.selectionStart;t.setRangeText('  ',s,t.selectionEnd,'end');t.oninput()}};
+$('#code').value=ALGS.BFS;hl();Recorder.logsRef=[];
+Object.keys(SKINS).forEach(id=>registerSkin(id,SKINS[id]));
+$('#theme').onchange=e=>applySkin(SKINS[e.target.value]);
+$('#skj').value=JSON.stringify({name:'Mi tema',font:'monospace',shape:'hex',line:'dashed',width:3,pathWidth:5,palette:{bg:'#101820',panel:'#1b2733',text:'#f2f2f2',border:'#3a4a5a',edge:'#7f8c9a',accent:'#ffb000'},states:{unvisited:'#2b3a49',queued:'#ffb000',current:'#00c2ff',visited:'#2ecc71',path:'#ff5e8a'}},null,2);
+$('#ska').onclick=()=>{try{const c=JSON.parse($('#skj').value);registerSkin('custom',c);$('#theme').value='custom';applySkin(c);$('#skm').textContent='✔ Tema aplicado'}catch(e){$('#skm').textContent='❌ '+e.message}};
+applySkin(BASE);setMode('v');
+window.onresize=render;setTimeout(()=>$('#smp').click(),0);
+</script></body></html>
